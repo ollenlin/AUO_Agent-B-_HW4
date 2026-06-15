@@ -4,63 +4,74 @@ import { defineTool } from "../utils/func-tool.js";
 const YOUBIKE_API =
   "https://tcgbusfs.blob.core.windows.net/dotapp/youbike/v2/youbike_immediate.json";
 
-function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const toRad = (deg) => (deg * Math.PI) / 180;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-async function getNearbyYoubike({
-  lat,
-  lon,
-  radius = 500,
-  available_amount = 0,
-  limit = 3,
+async function getYoubikeByDistrict({
+  district,
+  available_amount = 1,
+  limit = 5,
 }) {
+  const normalizedDistrict = String(district).trim();
+
+  if (normalizedDistrict === "台北市") {
+    return {
+      error: "請使用台北市行政區名稱查詢，例如：大安區、信義區、中山區。不要使用「台北市」。",
+    };
+  }
+
   const res = await fetch(YOUBIKE_API);
+
+  if (!res.ok) {
+    return {
+      error: `YouBike API error: ${res.status}`,
+    };
+  }
+
   const data = await res.json();
 
-  return data
+  const stations = data
     .filter((s) => s.act === "1")
+    .filter((s) => s.sarea === normalizedDistrict)
     .map((s) => ({
       name: s.sna.replace(/^YouBike2\.0_/, ""),
       area: s.sarea,
       address: s.ar,
-      available_rent: s.available_rent_bikes,
-      available_return: s.available_return_bikes,
-      total: s.Quantity,
-      distance: Math.round(haversine(lat, lon, s.latitude, s.longitude)),
+      available_rent: Number(s.available_rent_bikes),
+      available_return: Number(s.available_return_bikes),
+      total: Number(s.Quantity),
     }))
-    .filter(
-      (s) => s.distance <= radius && s.available_rent >= available_amount,
-    )
-    .sort((a, b) => a.distance - b.distance)
+    .filter((s) => s.available_rent >= available_amount)
+    .sort((a, b) => b.available_rent - a.available_rent)
     .slice(0, limit);
+
+  if (stations.length === 0) {
+    return {
+      district: normalizedDistrict,
+      available_amount,
+      message: `目前在 ${normalizedDistrict} 找不到符合條件的 YouBike 站點。`,
+      stations: [],
+    };
+  }
+
+  return {
+    district: normalizedDistrict,
+    available_amount,
+    count: stations.length,
+    stations,
+  };
 }
 
-export const youbikeTool = defineTool({
-  name: "get_nearby_youbike",
-  description: "取得指定經緯度座標附近可租借的 YouBike 站點",
-  fn: getNearbyYoubike,
+export const youbikeDistrictTool = defineTool({
+  name: "get_youbike_by_district",
+  description:
+    "使用台北市行政區名稱查詢 YouBike 站點可借車輛數，例如大安區、信義區、中山區。請不要使用台北市作為查詢條件。",
+  fn: getYoubikeByDistrict,
   parameters: z.object({
-    lat: z.number().describe("緯度"),
-    lon: z.number().describe("經度"),
-    radius: z
-      .number()
-      .default(500)
-      .describe("搜尋半徑（公尺），預設 500"),
+    district: z
+      .string()
+      .describe("台北市行政區名稱，例如：大安區、信義區、中山區、松山區"),
     available_amount: z
       .number()
-      .default(0)
-      .describe("至少可租借車輛數，預設 0"),
-    limit: z.number().default(3).describe("回傳筆數上限，預設 3"),
+      .default(1)
+      .describe("至少可租借車輛數，預設 1，代表只查詢目前有車可借的站點"),
+    limit: z.number().default(5).describe("回傳筆數上限，預設 5"),
   }),
 });
