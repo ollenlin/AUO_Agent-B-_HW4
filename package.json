@@ -1,0 +1,21 @@
+{
+  "name": "ai-agent-course-js",
+  "version": "0.1.0",
+  "description": "AI Agent 實作工作坊（JavaScript 版）",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.4.3",
+    "dotenv": "^17.4.2",
+    "lowdb": "^7.0.1",
+    "openai": "^6.38.0",
+    "ora": "^9.4.0",
+    "zod": "^4.4.3"
+  }
+}
